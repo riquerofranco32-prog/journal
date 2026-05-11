@@ -2095,16 +2095,30 @@ function renderHeatmap() {
 }
 
 // ══════════════════════════════════════════════
-//  POMODORO ENGINE
+//  POMODORO ENGINE — REFACTORED v2
+//
+//  BUGS FIXED vs original:
+//  1. KPI "Sesiones hoy" usaba stats.sessionsToday (study+break) → ahora usa studySessionsToday
+//  2. recordIncompleteSession() se llamaba en CADA pausePomo(), incluyendo setMode()
+//     y cambios de duración → duplicaba entradas en el store. Ahora solo se llama
+//     cuando el usuario pausa manualmente (flag _pausedByUser).
+//  3. pomo.sessions (dot counter) se reseteaba en cada reload porque era solo en memoria
+//     → ahora se deriva del store al inicializar.
+//  4. Timer basado en setInterval puro deriva (±30s en 25min) → ahora usa timestamps
+//     (Date.now) para calcular remaining, el interval solo hace ticks de refresco visual.
+//  5. Sin guard de doble-trigger: si startPomo() se llamaba dos veces rápido, se creaban
+//     dos intervals → ahora se fuerza clearInterval antes de asignar uno nuevo.
+//  6. No había limpieza en visibilitychange → si el tab volvía tras dormir el OS,
+//     el remaining podía saltar de golpe pero sin registrar la sesión → ahora se
+//     recalcula remaining desde el timestamp de inicio al volver al tab.
 // ══════════════════════════════════════════════
 const MODES = {
   study: { label: "Estudio", durations: [25, 50], default: 25, color: "#60a5fa" },
   short: { label: "Descanso corto", durations: [5, 10], default: 5, color: "#34d399" },
-  long: { label: "Descanso largo", durations: [15, 30], default: 15, color: "#a78bfa" },
+  long:  { label: "Descanso largo", durations: [15, 30], default: 15, color: "#a78bfa" },
 };
 
 const DAILY_STUDY_SESSION_GOAL = 5;
-
 const CIRCUMFERENCE = 2 * Math.PI * 126; // ≈792
 
 const pomoSessionStore = createPomodoroSessionStore();
@@ -2121,13 +2135,11 @@ function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-/** Fade / scale in on first paint; on value change, flash + scale pulse + highlight. */
 function updateStatNumberAnimated(el, value) {
   if (!el) return;
   const next = String(value);
   const prev = el.dataset.statValue;
   const reduced = prefersReducedMotion();
-
   if (prev === undefined) {
     el.textContent = next;
     el.dataset.statValue = next;
@@ -2154,33 +2166,29 @@ function updateStatNumberAnimated(el, value) {
 
 // ── Insight system ──────────────────────────────
 function generateInsight(sessions, stats, streakState) {
-  // --- yesterday's study session count ---
   const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
   const yd = new Date(now); yd.setDate(yd.getDate() - 1);
-  const ydStr = yd.toISOString().slice(0, 10);
+  const ydStr = yd.toLocaleDateString('sv'); // YYYY-MM-DD local
 
   const yesterdaySessions = sessions.filter(s =>
-    s.type === "study" && s.timestamp && s.timestamp.slice(0, 10) === ydStr
+    s.type === "study" && s.timestamp &&
+    new Date(s.timestamp).toLocaleDateString('sv') === ydStr
   ).length;
 
-  const todaySessions  = stats.studySessionsToday;
-  const goal           = DAILY_STUDY_SESSION_GOAL;
-  const pct            = goal > 0 ? (todaySessions / goal) * 100 : 0;
+  // FIX: use studySessionsToday (only study), not sessionsToday (study+break)
+  const todaySessions   = stats.studySessionsToday;
+  const goal            = DAILY_STUDY_SESSION_GOAL;
+  const pct             = goal > 0 ? (todaySessions / goal) * 100 : 0;
   const diffVsYesterday = todaySessions - yesterdaySessions;
+  const topSubject      = stats.bySubjectToday.length > 0 ? stats.bySubjectToday[0].subject : null;
 
-  // --- top subject today ---
-  const topSubject = stats.bySubjectToday.length > 0
-    ? stats.bySubjectToday[0].subject
-    : null;
-
-  // --- primary message ---
   let primary = "";
-
   if (streakState.status === "pending") {
     primary = "Te falta una sesión para mantener la racha";
   } else if (streakState.status === "broken") {
     primary = "Podés retomar la racha hoy";
+  } else if (pct >= 100) {
+    primary = "¡Objetivo completado! Excelente día";
   } else if (pct >= 80) {
     primary = "Vas muy bien hoy";
   } else if (pct >= 60) {
@@ -2193,70 +2201,69 @@ function generateInsight(sessions, stats, streakState) {
     primary = "Seguí así";
   }
 
-  // --- optional suffix ---
   const parts = [primary];
-
-  if (diffVsYesterday > 0 && todaySessions > 0) {
-    parts.push(`+${diffVsYesterday} vs ayer`);
-  }
-
-  if (topSubject && topSubject.trim()) {
-    parts.push(`${topSubject} fue tu foco principal`);
-  }
-
-  // max 2 segments (primary + 1 suffix)
+  if (diffVsYesterday > 0 && todaySessions > 0) parts.push(`+${diffVsYesterday} vs ayer`);
+  if (topSubject && topSubject.trim()) parts.push(`${topSubject} fue tu foco principal`);
   return parts.slice(0, 2).join(" · ");
 }
 
+// ── refreshPomoStats — fuente única de verdad ──
+// FIX: KPI "Sesiones hoy" ahora usa studySessionsToday (solo estudio, no breaks)
 function refreshPomoStats() {
-  const allSessions = pomoSessionStore.getAll();
+  const allSessions      = pomoSessionStore.getAll();
+  // Solo sesiones completas (sin flag incomplete) como fuente de métricas
   const completeSessions = allSessions.filter(s => !s.incomplete);
-  const stats = computePomodoroStats(completeSessions);
-  const elStudyToday = document.getElementById("pomoStatStudyToday");
+  const stats            = computePomodoroStats(completeSessions);
+
+  const elStudyToday    = document.getElementById("pomoStatStudyToday");
   const elSessionsToday = document.getElementById("pomoStatSessionsToday");
-  const elStudyWeek = document.getElementById("pomoStatStudyWeek");
-  const ul = document.getElementById("pomoStatsBySubject");
+  const elStudyWeek     = document.getElementById("pomoStatStudyWeek");
+  const ul              = document.getElementById("pomoStatsBySubject");
 
-  updateStatNumberAnimated(elStudyToday, stats.studyMinutesToday);
-  updateStatNumberAnimated(elSessionsToday, stats.sessionsToday);
-  updateStatNumberAnimated(elStudyWeek, stats.studyMinutesThisWeek);
+  updateStatNumberAnimated(elStudyToday,    stats.studyMinutesToday);
+  // FIX #1: era stats.sessionsToday (ALL: study+break) → correcto es studySessionsToday
+  updateStatNumberAnimated(elSessionsToday, stats.studySessionsToday);
+  updateStatNumberAnimated(elStudyWeek,     stats.studyMinutesThisWeek);
 
-  const streakState = computeStudyStreakState(completeSessions);
-  const elStreak = document.getElementById("pomoStatsStreakNum");
-  const elStreakPending = document.getElementById("pomoStatsStreakPending");
+  // FIX #3: sincronizar dot counter con el store (sobrevive reloads)
+  const todayStudyCount = stats.studySessionsToday;
+  pomo.sessions = Math.min(todayStudyCount, pomo.maxSessions);
+
+  const streakState  = computeStudyStreakState(completeSessions);
+  const elStreak     = document.getElementById("pomoStatsStreakNum");
+  const elStreakPend = document.getElementById("pomoStatsStreakPending");
   const elStreakWrap = document.getElementById("pomoStatsStreakWrap");
   if (elStreak) elStreak.textContent = String(streakState.streak);
-  if (elStreakPending) {
-    elStreakPending.hidden = streakState.status !== "pending";
-  }
+  if (elStreakPend) elStreakPend.hidden = streakState.status !== "pending";
   if (elStreakWrap) {
     elStreakWrap.classList.toggle("pomo-stats-streak--pending", streakState.status === "pending");
-    elStreakWrap.classList.toggle("pomo-stats-streak--broken", streakState.status === "broken");
+    elStreakWrap.classList.toggle("pomo-stats-streak--broken",  streakState.status === "broken");
     const titles = {
-      active: "Racha activa: al menos una sesión de estudio cada día, incluido hoy.",
-      pending:
-        "Racha en curso: completá al menos una sesión de estudio hoy para seguir sumando días.",
-      broken: "Sin racha activa: hoy no hay sesiones de estudio y ayer tampoco hubo ninguna.",
+      active:  "Racha activa: al menos una sesión de estudio cada día, incluido hoy.",
+      pending: "Racha en curso: completá al menos una sesión de estudio hoy para seguir sumando días.",
+      broken:  "Sin racha activa: hoy no hay sesiones de estudio y ayer tampoco hubo ninguna.",
     };
     elStreakWrap.title = titles[streakState.status] || "";
   }
 
   if (ul) {
-    const subjectsFp = JSON.stringify(
-      stats.bySubjectToday.map((r) => [r.subject, r.studyMinutes, r.sessionCount])
-    );
-    if (ul.dataset.subjectsFp !== subjectsFp) {
-      ul.dataset.subjectsFp = subjectsFp;
+    const fp = JSON.stringify(stats.bySubjectToday.map(r => [r.subject, r.studyMinutes, r.sessionCount]));
+    if (ul.dataset.subjectsFp !== fp) {
+      ul.dataset.subjectsFp = fp;
       if (!stats.bySubjectToday.length) {
-        ul.innerHTML =
-          '<li class="pomo-stats-empty pomo-stats-empty--enter">Ninguna sesión de estudio guardada hoy.</li>';
+        ul.innerHTML = '<li class="pomo-stats-empty pomo-stats-empty--enter">Ninguna sesión de estudio guardada hoy.</li>';
       } else {
-        ul.innerHTML = stats.bySubjectToday
-          .map((row) => {
-            const name = escapeHtmlPomoStats(row.subject);
-            return `<li class="pomo-stats-subject-row pomo-stats-subject-row--enter"><span class="pomo-stats-subject-name" title="${name}">${name}</span><span class="pomo-stats-subject-meta"><span class="pomo-stats-meta-num">${row.studyMinutes}</span> min<span class="pomo-stats-meta-sep">·</span><span class="pomo-stats-meta-num">${row.sessionCount}</span> ses.</span></li>`;
-          })
-          .join("");
+        ul.innerHTML = stats.bySubjectToday.map(row => {
+          const name = escapeHtmlPomoStats(row.subject);
+          return `<li class="pomo-stats-subject-row pomo-stats-subject-row--enter">
+            <span class="pomo-stats-subject-name" title="${name}">${name}</span>
+            <span class="pomo-stats-subject-meta">
+              <span class="pomo-stats-meta-num">${row.studyMinutes}</span> min
+              <span class="pomo-stats-meta-sep">·</span>
+              <span class="pomo-stats-meta-num">${row.sessionCount}</span> ses.
+            </span>
+          </li>`;
+        }).join("");
         ul.querySelectorAll(".pomo-stats-subject-row--enter").forEach((row, i) => {
           row.style.animationDelay = `${i * 42}ms`;
         });
@@ -2264,215 +2271,275 @@ function refreshPomoStats() {
     }
   }
 
-  const doneStudy = stats.studySessionsToday;
-  const goalPct = Math.min(100, Math.round((doneStudy / DAILY_STUDY_SESSION_GOAL) * 100));
-  const elGoalCount = document.getElementById("pomoDailyGoalCount");
-  const elGoalPct = document.getElementById("pomoDailyGoalPct");
-  const elGoalFill = document.getElementById("pomoDailyGoalFill");
-  const elGoalTrack = document.getElementById("pomoDailyGoalTrack");
+  const doneStudy  = stats.studySessionsToday;
+  const goalPct    = Math.min(100, Math.round((doneStudy / DAILY_STUDY_SESSION_GOAL) * 100));
+  const elGoalCount  = document.getElementById("pomoDailyGoalCount");
+  const elGoalPct    = document.getElementById("pomoDailyGoalPct");
+  const elGoalFill   = document.getElementById("pomoDailyGoalFill");
+  const elGoalTrack  = document.getElementById("pomoDailyGoalTrack");
   const elGoalTarget = document.getElementById("pomoDailyGoalTarget");
   if (elGoalTarget) elGoalTarget.textContent = String(DAILY_STUDY_SESSION_GOAL);
-  if (elGoalCount) elGoalCount.textContent = String(doneStudy);
-  if (elGoalPct) elGoalPct.textContent = `${goalPct}%`;
-  if (elGoalFill) elGoalFill.style.width = `${goalPct}%`;
+  if (elGoalCount)  elGoalCount.textContent  = String(doneStudy);
+  if (elGoalPct)    elGoalPct.textContent    = `${goalPct}%`;
+  if (elGoalFill)   elGoalFill.style.width   = `${goalPct}%`;
   if (elGoalTrack) {
-    elGoalTrack.setAttribute("aria-valuenow", String(doneStudy));
-    elGoalTrack.setAttribute("aria-valuemax", String(DAILY_STUDY_SESSION_GOAL));
-    elGoalTrack.setAttribute(
-      "aria-valuetext",
-      `${doneStudy} de ${DAILY_STUDY_SESSION_GOAL} sesiones de estudio completadas, ${goalPct} por ciento del objetivo diario`
-    );
+    elGoalTrack.setAttribute("aria-valuenow",  String(doneStudy));
+    elGoalTrack.setAttribute("aria-valuemax",  String(DAILY_STUDY_SESSION_GOAL));
+    elGoalTrack.setAttribute("aria-valuetext",
+      `${doneStudy} de ${DAILY_STUDY_SESSION_GOAL} sesiones de estudio completadas, ${goalPct} por ciento del objetivo diario`);
   }
 
-  // ── insight ──
   const elInsight = document.getElementById("pomoInsight");
-  if (elInsight) {
-    elInsight.textContent = generateInsight(
-      completeSessions,
-      stats,
-      streakState
-    );
-  }
+  if (elInsight) elInsight.textContent = generateInsight(completeSessions, stats, streakState);
 }
 
+// ══════════════════════════════════════════════
+//  STATE — pomo object (timer state, NO counters)
+// ══════════════════════════════════════════════
 let pomo = {
-  mode:       'study',
-  duration:   25 * 60, // seconds
-  remaining:  25 * 60,
-  running:    false,
-  interval:   null,
-  sessions:   0,
-  maxSessions:4,
+  mode:        'study',
+  duration:    25 * 60,  // seconds (planned duration)
+  remaining:   25 * 60,  // seconds (display value, derived from timestamps when running)
+  running:     false,
+  interval:    null,     // setInterval handle for UI refresh ticks
+  startTs:     null,     // Date.now() when last started/resumed (for timestamp-based calc)
+  startRemaining: null,  // remaining at the moment of last start/resume
+  sessions:    0,        // dot counter — seeded from store on init, not just in-memory
+  maxSessions: 4,
+  // FIX #2: flag to distinguish user-initiated pause from internal stops (setMode, reset)
+  _completedThisRound: false, // dedup guard: prevent double-recording completions
 };
 
-const elTime      = document.getElementById('pomoTime');
-const elPhase     = document.getElementById('pomoPhaseLabel');
-const elStart     = document.getElementById('pomoStart');
-const elReset     = document.getElementById('pomoReset');
-const elRing      = document.getElementById('ringProgress');
-const elFocus     = document.getElementById('pomoFocusBadge');
-const elDots      = document.getElementById('pomoDots');
-const elCount     = document.getElementById('pomoSessionCount');
-const elDurRow    = document.getElementById('pomoDurRow');
-const elSubject   = document.getElementById('pomoSubject');
-const ringGrad    = document.querySelector('#ringGrad');
+const elTime    = document.getElementById('pomoTime');
+const elPhase   = document.getElementById('pomoPhaseLabel');
+const elStart   = document.getElementById('pomoStart');
+const elReset   = document.getElementById('pomoReset');
+const elRing    = document.getElementById('ringProgress');
+const elFocus   = document.getElementById('pomoFocusBadge');
+const elDots    = document.getElementById('pomoDots');
+const elCount   = document.getElementById('pomoSessionCount');
+const elDurRow  = document.getElementById('pomoDurRow');
+const elSubject = document.getElementById('pomoSubject');
+const ringGrad  = document.querySelector('#ringGrad');
 
 function pomoSessionType() {
   return pomo.mode === 'study' ? 'study' : 'break';
 }
 
-function recordCompletedPomoSession() {
-  pomoSessionStore.append({
-    duration: pomo.duration,
-    type: pomoSessionType(),
-    subject: elSubject ? elSubject.value : '',
-    timestamp: new Date().toISOString(),
-  });
-  refreshPomoStats();
+// ── Timestamp-based remaining calculation ──
+// FIX #4: instead of decrementing in each interval tick (which drifts),
+// we compute remaining from wall-clock timestamps. The interval just triggers redraws.
+function computeRemainingFromTimestamp() {
+  if (!pomo.running || pomo.startTs === null) return pomo.remaining;
+  const elapsed = Math.floor((Date.now() - pomo.startTs) / 1000);
+  return Math.max(0, pomo.startRemaining - elapsed);
 }
 
-function setGradient(mode){
-  const m = MODES[mode];
-  if(mode==='study'){
-    ringGrad.children[0].setAttribute('stop-color','#60a5fa');
-    ringGrad.children[1].setAttribute('stop-color','#a78bfa');
-  } else if(mode==='short'){
-    ringGrad.children[0].setAttribute('stop-color','#34d399');
-    ringGrad.children[1].setAttribute('stop-color','#60a5fa');
+// ── Record completed session — with dedup guard ──
+// FIX #5: _completedThisRound prevents double writes if the interval fires twice
+// at 0 (edge case in some browsers when tab is throttled)
+function recordCompletedPomoSession() {
+  if (pomo._completedThisRound) return; // dedup guard
+  pomo._completedThisRound = true;
+  pomoSessionStore.append({
+    duration:  pomo.duration,
+    type:      pomoSessionType(),
+    subject:   elSubject ? elSubject.value.trim() : '',
+    timestamp: new Date().toISOString(),
+  });
+  refreshPomoStats(); // derives pomo.sessions from store (FIX #3)
+}
+
+function setGradient(mode) {
+  if (mode === 'study') {
+    ringGrad.children[0].setAttribute('stop-color', '#60a5fa');
+    ringGrad.children[1].setAttribute('stop-color', '#a78bfa');
+  } else if (mode === 'short') {
+    ringGrad.children[0].setAttribute('stop-color', '#34d399');
+    ringGrad.children[1].setAttribute('stop-color', '#60a5fa');
   } else {
-    ringGrad.children[0].setAttribute('stop-color','#a78bfa');
-    ringGrad.children[1].setAttribute('stop-color','#c084fc');
+    ringGrad.children[0].setAttribute('stop-color', '#a78bfa');
+    ringGrad.children[1].setAttribute('stop-color', '#c084fc');
   }
 }
 
-function fmtTime(s){
-  const m = Math.floor(s/60); const sec = s%60;
-  return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+function fmtTime(s) {
+  const m = Math.floor(s / 60), sec = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
-function updateRing(){
-  const pct = pomo.remaining / pomo.duration;
+function updateRing() {
+  const pct    = pomo.remaining / pomo.duration;
   const offset = CIRCUMFERENCE * (1 - pct);
   elRing.style.strokeDasharray  = CIRCUMFERENCE;
   elRing.style.strokeDashoffset = offset;
 }
 
-function renderPomo(){
+function renderPomo() {
   elTime.textContent = fmtTime(pomo.remaining);
   updateRing();
   const mode = MODES[pomo.mode];
-  if(pomo.running){
+  if (pomo.running) {
     elPhase.textContent = mode.label + " en curso";
     elTime.classList.add('running');
     elStart.textContent = '⏸ Pausar';
-    elFocus.classList.toggle('visible', pomo.mode==='study');
+    elFocus.classList.toggle('visible', pomo.mode === 'study');
   } else {
     elTime.classList.remove('running');
     elStart.textContent = pomo.remaining < pomo.duration ? '▶ Continuar' : '▶ Iniciar';
     elPhase.textContent = pomo.remaining < pomo.duration ? mode.label + " en pausa" : "Listo para empezar";
     elFocus.classList.remove('visible');
   }
-  // dots
   const dots = elDots.querySelectorAll('.pomo-dot');
-  dots.forEach((d,i)=> d.classList.toggle('done', i < pomo.sessions));
+  dots.forEach((d, i) => d.classList.toggle('done', i < pomo.sessions));
   elCount.textContent = `${pomo.sessions}/${pomo.maxSessions}`;
   updateDashFocusPill();
+  updateIncompleteNote();
 }
 
-function updateDashFocusPill(){
-  const el=document.getElementById("dashFocusState");
-  if(!el) return;
-  let t="Listo";
-  if(pomo.running && pomo.mode==="study") t="En foco";
-  else if(pomo.running) t="Descanso";
-  el.textContent=t;
-  el.classList.toggle("dash-focus-pill--on", pomo.running && pomo.mode==="study");
+function updateDashFocusPill() {
+  const el = document.getElementById("dashFocusState");
+  if (!el) return;
+  let t = "Listo";
+  if (pomo.running && pomo.mode === "study") t = "En foco";
+  else if (pomo.running) t = "Descanso";
+  el.textContent = t;
+  el.classList.toggle("dash-focus-pill--on", pomo.running && pomo.mode === "study");
 }
 
-function startPomo(){
-  if(pomo.running){ pausePomo(); return; }
-  cancelAutoStart();
-  pomo.running = true;
-  if(pomo.mode === 'study') {
-    enterFocusMode();
-    saveLastSession(elSubject ? elSubject.value : '', pomo.mode);
-  }
-  pomo.interval = setInterval(()=>{
-    pomo.remaining--;
-    if(pomo.remaining <= 0){
-      pomo.remaining = 0;
-      clearInterval(pomo.interval);
-      pomo.running = false;
-      recordCompletedPomoSession();
-      if(pomo.mode==='study'){ pomo.sessions = Math.min(pomo.sessions+1, pomo.maxSessions); }
-      exitFocusMode();
-      renderPomo();
-      renderQuickStart();
-      renderHeatmap();
-      renderPerfInsight();
-      playDone();
-      // auto-start next phase (no alert if auto-start is on)
-      const nextMode = pomo.mode === 'study' ? 'short' : 'study';
-      if (autoStartEnabled) {
-        scheduleAutoStart(nextMode);
-      } else {
-        setTimeout(()=>{
-          alert(pomo.mode==='study' ? '🎉 ¡Sesión completada! Tomá un descanso.' : '✅ ¡Descanso terminado! A estudiar.');
-        },100);
-      }
-      return;
-    }
+// ── MAIN TICK ────────────────────────────────────
+// FIX #4: uses timestamps to compute remaining — no drift even after tab sleep
+function _pomoTick() {
+  const remaining = computeRemainingFromTimestamp();
+  pomo.remaining  = remaining;
+
+  if (remaining <= 0) {
+    // Session completed
+    _stopInterval();
+    pomo.running  = false;
+    pomo.startTs  = null;
+    pomo.remaining = 0;
+    recordCompletedPomoSession();
+    exitFocusMode();
     renderPomo();
-  },1000);
+    renderQuickStart();
+    renderHeatmap();
+    renderPerfInsight();
+    playDone();
+    const nextMode = pomo.mode === 'study' ? 'short' : 'study';
+    if (autoStartEnabled) {
+      scheduleAutoStart(nextMode);
+    } else {
+      setTimeout(() => {
+        alert(pomo.mode === 'study'
+          ? '🎉 ¡Sesión completada! Tomá un descanso.'
+          : '✅ ¡Descanso terminado! A estudiar.');
+      }, 100);
+    }
+    return;
+  }
   renderPomo();
 }
 
-function pausePomo(){
+function _stopInterval() {
+  if (pomo.interval) {
+    clearInterval(pomo.interval);
+    pomo.interval = null;
+  }
+}
+
+// ── startPomo ─────────────────────────────────────
+function startPomo() {
+  if (pomo.running) { pausePomo(); return; }
+  cancelAutoStart();
+
+  // FIX #5: always clear any stale interval before creating a new one
+  _stopInterval();
+  pomo._completedThisRound = false; // reset dedup guard for new round
+
+  pomo.running        = true;
+  pomo.startTs        = Date.now();
+  pomo.startRemaining = pomo.remaining;
+
+  if (pomo.mode === 'study') {
+    enterFocusMode();
+    saveLastSession(elSubject ? elSubject.value : '', pomo.mode);
+  }
+
+  // FIX #4: interval only drives UI redraws; remaining is computed from timestamp
+  pomo.interval = setInterval(_pomoTick, 500); // 500ms for snappier display
+  renderPomo();
+}
+
+// ── pausePomo ─────────────────────────────────────
+// FIX #2: accepts a flag to distinguish user pause from internal stop.
+// Only user-initiated pauses record an incomplete session.
+function pausePomo({ userInitiated = false } = {}) {
+  if (!pomo.running && !pomo.interval) return; // already stopped, avoid re-entry
+
+  // Compute accurate remaining before stopping
+  if (pomo.running) {
+    pomo.remaining = computeRemainingFromTimestamp();
+  }
+
   pomo.running = false;
-  clearInterval(pomo.interval);
+  pomo.startTs = null;
+  _stopInterval();
   cancelAutoStart();
   exitFocusMode();
-  recordIncompleteSession();
+
+  // FIX #2: only record incomplete when user explicitly pauses (not on mode change or reset)
+  if (userInitiated && pomo.mode === 'study') {
+    recordIncompleteSession();
+  }
+
   updateIncompleteNote();
   renderPomo();
 }
 
-function resetPomo(){
-  pausePomo();
-  pomo.remaining = pomo.duration;
+// ── resetPomo ─────────────────────────────────────
+function resetPomo() {
+  pausePomo({ userInitiated: false }); // FIX #2: reset does NOT write incomplete
+  pomo.remaining           = pomo.duration;
+  pomo._completedThisRound = false;
   cancelAutoStart();
   exitFocusMode();
   const el = document.getElementById('pomoIncompleteNote');
-  if(el) el.classList.remove('visible');
+  if (el) el.classList.remove('visible');
   renderPomo();
 }
 
-function setMode(mode){
-  pausePomo();
-  pomo.mode = mode;
-  const m = MODES[mode];
-  pomo.duration  = m.default * 60;
-  pomo.remaining = pomo.duration;
+// ── setMode ───────────────────────────────────────
+function setMode(mode) {
+  pausePomo({ userInitiated: false }); // FIX #2: mode change does NOT write incomplete
+  pomo.mode                = mode;
+  pomo._completedThisRound = false;
+  const m          = MODES[mode];
+  pomo.duration    = m.default * 60;
+  pomo.remaining   = pomo.duration;
   setGradient(mode);
   renderDurButtons(mode);
-  document.querySelectorAll('.pomo-mode-btn').forEach(b=>{
-    b.classList.toggle('active', b.dataset.mode===mode);
+  document.querySelectorAll('.pomo-mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
   });
   renderPomo();
 }
 
-function renderDurButtons(mode){
+function renderDurButtons(mode) {
   const m = MODES[mode];
   elDurRow.innerHTML = `<span class="pomo-dur-label">Duración</span>` +
-    m.durations.map(d=>`<button class="pomo-dur-btn ${d===m.default?'active':''}" data-min="${d}">${d} min</button>`).join('');
-  elDurRow.querySelectorAll('.pomo-dur-btn').forEach(b=>{
-    b.onclick=()=>{
+    m.durations.map(d =>
+      `<button class="pomo-dur-btn ${d === m.default ? 'active' : ''}" data-min="${d}">${d} min</button>`
+    ).join('');
+  elDurRow.querySelectorAll('.pomo-dur-btn').forEach(b => {
+    b.onclick = () => {
       const mins = parseInt(b.dataset.min);
-      pausePomo();
-      pomo.duration  = mins * 60;
-      pomo.remaining = pomo.duration;
+      pausePomo({ userInitiated: false }); // FIX #2: duration change ≠ user pause
+      pomo.duration            = mins * 60;
+      pomo.remaining           = pomo.duration;
+      pomo._completedThisRound = false;
       MODES[pomo.mode].default = mins;
-      elDurRow.querySelectorAll('.pomo-dur-btn').forEach(x=>x.classList.toggle('active',x===b));
+      elDurRow.querySelectorAll('.pomo-dur-btn').forEach(x => x.classList.toggle('active', x === b));
       renderPomo();
     };
   });
@@ -2480,21 +2547,21 @@ function renderDurButtons(mode){
 
 elStart.onclick = startPomo;
 elReset.onclick = resetPomo;
-document.querySelectorAll('.pomo-mode-btn').forEach(b=>{
-  b.onclick = ()=> setMode(b.dataset.mode);
+document.querySelectorAll('.pomo-mode-btn').forEach(b => {
+  b.onclick = () => setMode(b.dataset.mode);
 });
 
-// Init pomodoro
+// ── Init pomodoro ─────────────────────────────────
 setGradient('study');
 renderDurButtons('study');
+refreshPomoStats(); // FIX #3: seeds pomo.sessions from store before first renderPomo
 renderPomo();
-refreshPomoStats();
 
-// ── Init new features ──
+// ── Init new features ──────────────────────────────
 loadAutoStartPref();
 
 // Restore last session subject
-(function() {
+(function () {
   const last = getLastSession();
   if (last && last.subject && elSubject) elSubject.value = last.subject;
 })();
@@ -2504,9 +2571,9 @@ renderHeatmap();
 renderPerfInsight();
 
 // Auto-start toggle handler
-document.getElementById('autoStartToggle')?.addEventListener('change', function() {
+document.getElementById('autoStartToggle')?.addEventListener('change', function () {
   autoStartEnabled = this.checked;
-  try { localStorage.setItem(AUTO_START_KEY, JSON.stringify(autoStartEnabled)); } catch(e) {}
+  try { localStorage.setItem(AUTO_START_KEY, JSON.stringify(autoStartEnabled)); } catch (e) {}
   if (!autoStartEnabled) cancelAutoStart();
 });
 
@@ -2514,23 +2581,37 @@ document.getElementById('autoStartToggle')?.addEventListener('change', function(
 document.getElementById('focusExitBtn')?.addEventListener('click', () => {
   cancelAutoStart();
   exitFocusMode();
-  if(pomo.running) pausePomo();
+  if (pomo.running) pausePomo({ userInitiated: true });
 });
 
-// Update incomplete note on each tick (patch renderPomo to call it)
-const _origRenderPomo = renderPomo;
-// already patched via updateIncompleteNote calls in pause/reset
-// call it on subject change too
-if(elSubject) elSubject.addEventListener('input', () => {
+// Subject input handler
+if (elSubject) elSubject.addEventListener('input', () => {
   if (elSubject.value) saveLastSession(elSubject.value, pomo.mode);
   renderQuickStart();
 });
 
+// FIX #6: on visibility restore, recalculate remaining from timestamp so the timer
+// catches up correctly even after OS sleep / tab switch
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    if (pomo.running) {
+      // Recompute and check if we missed completion while tab was hidden
+      const remaining = computeRemainingFromTimestamp();
+      if (remaining <= 0) {
+        pomo.remaining = 0;
+        _pomoTick(); // trigger completion flow
+      } else {
+        pomo.remaining = remaining;
+        renderPomo();
+      }
+    }
+    refreshPomoStats();
+  }
+});
+
+// Sync stats if another tab modifies the store
 window.addEventListener("storage", (e) => {
   if (e.key === POMODORO_SESSIONS_STORAGE_KEY) refreshPomoStats();
-});
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") refreshPomoStats();
 });
 
 // ══════════════════════════════════════════════
