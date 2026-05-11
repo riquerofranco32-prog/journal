@@ -1421,6 +1421,225 @@ body {
   margin-top: var(--sp-2);
 }
 
+/* ── QUICK START ── */
+.quick-start {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+  min-height: 28px;
+}
+.qs-label {
+  font-size: var(--text-xs);
+  color: var(--dim);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.qs-btn {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  font-family: var(--font-sans);
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+  white-space: nowrap;
+}
+.qs-btn:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(255,255,255,.05);
+}
+.qs-continue {
+  color: var(--blue);
+  border-color: rgba(96,165,250,.35);
+  background: rgba(96,165,250,.07);
+}
+.qs-continue:hover {
+  background: rgba(96,165,250,.12);
+  border-color: rgba(96,165,250,.55);
+}
+
+/* ── AUTO-START TOGGLE ── */
+.auto-start-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+}
+.auto-start-lbl {
+  font-size: var(--text-xs);
+  color: var(--dim);
+  font-weight: 500;
+  flex: 1;
+}
+.auto-start-countdown {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  min-width: 44px;
+  text-align: right;
+  opacity: 0;
+  transition: opacity .2s;
+}
+.auto-start-countdown.visible { opacity: 1; }
+.toggle-switch {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  flex-shrink: 0;
+}
+.toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background .2s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  left: 2px; top: 2px;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform .2s, background .2s;
+}
+.toggle-switch input:checked + .toggle-slider { background: rgba(96,165,250,.25); }
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(13px);
+  background: var(--blue);
+}
+
+/* ── FOCUS MODE ── */
+body.focus-mode .dash-col--stats,
+body.focus-mode .dash-progress,
+body.focus-mode .journal-shell {
+  opacity: 0;
+  pointer-events: none;
+  max-height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  transition: opacity .3s ease, max-height .4s ease;
+}
+body.focus-mode .dash-grid {
+  grid-template-columns: 1fr;
+}
+body.focus-mode .pomo-hero {
+  padding-top: var(--sp-5);
+}
+body.focus-mode .dash-col--stats { display: none; }
+.dash-col--stats,
+.dash-progress,
+.journal-shell {
+  transition: opacity .3s ease;
+}
+.focus-exit-btn {
+  display: none;
+  font-size: var(--text-xs);
+  color: var(--dim);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  transition: color .15s, border-color .15s;
+}
+.focus-exit-btn:hover { color: var(--muted); border-color: var(--border-strong); }
+body.focus-mode .focus-exit-btn { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ── INCOMPLETE SESSION BADGE ── */
+.pomo-incomplete-note {
+  font-size: var(--text-xs);
+  color: var(--amber);
+  margin-top: var(--sp-2);
+  text-align: center;
+  min-height: 16px;
+  opacity: 0;
+  transition: opacity .25s;
+}
+.pomo-incomplete-note.visible { opacity: 1; }
+
+/* ── HEATMAP ── */
+.heatmap-section {
+  margin-top: clamp(28px, 3.2vw, 40px);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.heatmap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--sp-4);
+}
+.heatmap-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--dim);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--dim);
+}
+.heatmap-grid {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+.heatmap-cell {
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  background: rgba(255,255,255,.04);
+  transition: transform .1s;
+  cursor: default;
+  position: relative;
+}
+.heatmap-cell:hover { transform: scale(1.25); z-index: 2; }
+.heatmap-cell[data-v="1"] { background: rgba(96,165,250,.15); }
+.heatmap-cell[data-v="2"] { background: rgba(96,165,250,.30); }
+.heatmap-cell[data-v="3"] { background: rgba(96,165,250,.50); }
+.heatmap-cell[data-v="4"] { background: rgba(96,165,250,.72); }
+.heatmap-cell[data-v="5"] { background: rgba(96,165,250,.92); }
+
+/* ── PERFORMANCE INSIGHT BANNER ── */
+.perf-insight-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  background: rgba(96,165,250,.06);
+  border: 1px solid rgba(96,165,250,.15);
+  border-radius: var(--radius);
+  margin-top: var(--sp-3);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  line-height: 1.45;
+}
+.perf-insight-bar:empty { display: none; }
+.perf-insight-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
 .save-ind {
   position: fixed;
   bottom: var(--sp-5);
@@ -1452,6 +1671,7 @@ body {
     <p class="dash-header-date" id="dashHdrDate"></p>
   </div>
   <div class="dash-header-aside">
+    <button class="focus-exit-btn" id="focusExitBtn">✕ Salir del foco</button>
     <span class="dash-focus-pill" id="dashFocusState">Listo</span>
     <div class="sync-badge loading" id="syncBadge">conectando…</div>
   </div>
@@ -1473,6 +1693,9 @@ body {
     <label for="pomoSubject">Materia / tema</label>
     <input type="text" id="pomoSubject" class="pomo-subject-input" placeholder="Ej.: Física, AM2…" maxlength="160" autocomplete="off" />
   </div>
+
+  <!-- Quick Start -->
+  <div class="quick-start" id="quickStart"></div>
 
   <div class="pomo-ring-wrap">
     <svg class="pomo-ring-svg" viewBox="0 0 280 280" id="pomoRingSvg">
@@ -1515,6 +1738,18 @@ body {
       <div class="pomo-dot"></div>
     </div>
     <span id="pomoSessionCount" class="text-mono-muted">0/4</span>
+  </div>
+
+  <div class="pomo-incomplete-note" id="pomoIncompleteNote">sesión incompleta — no contará</div>
+
+  <!-- Auto-start -->
+  <div class="auto-start-row">
+    <span class="auto-start-lbl">Auto-iniciar siguiente fase</span>
+    <span class="auto-start-countdown" id="autoStartCountdown"></span>
+    <label class="toggle-switch" title="Encender auto-inicio">
+      <input type="checkbox" id="autoStartToggle">
+      <span class="toggle-slider"></span>
+    </label>
   </div>
 
 </section>
@@ -1583,7 +1818,25 @@ body {
   </div>
 </section>
 
-</main>
+<!-- Performance Insight Banner -->
+<div class="perf-insight-bar" id="perfInsightBar"></div>
+
+<!-- Heatmap -->
+<div class="heatmap-section" id="heatmapSection">
+  <div class="heatmap-head">
+    <span class="heatmap-title">Actividad — últimos 30 días</span>
+    <div class="heatmap-legend">
+      menos
+      <div class="heatmap-cell"></div>
+      <div class="heatmap-cell" data-v="1"></div>
+      <div class="heatmap-cell" data-v="2"></div>
+      <div class="heatmap-cell" data-v="3"></div>
+      <div class="heatmap-cell" data-v="5"></div>
+      más
+    </div>
+  </div>
+  <div class="heatmap-grid" id="heatmapGrid"></div>
+</div>
 
 <section class="journal-shell" aria-labelledby="journalHeading">
 <h2 class="section-heading" id="journalHeading">Journal del día</h2>
@@ -1638,6 +1891,209 @@ function playDone(){
 <script src="pomodoro-sessions.js"></script>
 <script src="pomodoro-stats.js"></script>
 <script>
+// ══════════════════════════════════════════════
+//  LAST SESSION MEMORY
+// ══════════════════════════════════════════════
+const LAST_SESSION_KEY = 'cali_last_session_v1';
+
+function saveLastSession(subject, mode) {
+  try {
+    localStorage.setItem(LAST_SESSION_KEY, JSON.stringify({ subject, mode }));
+  } catch(e) {}
+}
+
+function getLastSession() {
+  try { return JSON.parse(localStorage.getItem(LAST_SESSION_KEY)) || null; }
+  catch(e) { return null; }
+}
+
+// ══════════════════════════════════════════════
+//  QUICK START — most used subjects
+// ══════════════════════════════════════════════
+function getTopSubjects(n = 4) {
+  const sessions = pomoSessionStore.getAll().filter(s => s.type === 'study' && s.subject);
+  const counts = {};
+  sessions.forEach(s => { counts[s.subject] = (counts[s.subject] || 0) + 1; });
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n)
+    .map(([subject]) => subject);
+}
+
+function renderQuickStart() {
+  const el = document.getElementById('quickStart');
+  if (!el) return;
+  const top = getTopSubjects(4);
+  const last = getLastSession();
+  const parts = [];
+
+  if (last && last.subject) {
+    parts.push(`<button class="qs-btn qs-continue" onclick="quickContinue()" title="Continuar donde dejaste">▶ continuar ${escapeHtmlPomoStats(last.subject)}</button>`);
+  }
+
+  const shown = new Set(last ? [last.subject] : []);
+  top.filter(s => !shown.has(s)).slice(0, 3).forEach(subj => {
+    parts.push(`<button class="qs-btn" onclick="quickStart(${JSON.stringify(subj)})">${escapeHtmlPomoStats(subj)}</button>`);
+  });
+
+  if (!parts.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<span class="qs-label">acceso rápido</span>` + parts.join('');
+}
+
+function quickStart(subject) {
+  elSubject.value = subject;
+  if (pomo.mode !== 'study') setMode('study');
+  startPomo();
+}
+
+function quickContinue() {
+  const last = getLastSession();
+  if (!last) return;
+  elSubject.value = last.subject || '';
+  if (pomo.mode !== (last.mode || 'study')) setMode(last.mode || 'study');
+  startPomo();
+}
+
+// ══════════════════════════════════════════════
+//  AUTO-START FLOW
+// ══════════════════════════════════════════════
+const AUTO_START_KEY = 'cali_autostart_v1';
+let autoStartEnabled = false;
+let autoStartTimer = null;
+
+function loadAutoStartPref() {
+  try { autoStartEnabled = JSON.parse(localStorage.getItem(AUTO_START_KEY)) === true; }
+  catch(e) {}
+  const tog = document.getElementById('autoStartToggle');
+  if (tog) tog.checked = autoStartEnabled;
+}
+
+function scheduleAutoStart(nextMode) {
+  if (!autoStartEnabled) return;
+  let remaining = 3;
+  const el = document.getElementById('autoStartCountdown');
+  if (el) { el.textContent = `auto en ${remaining}s`; el.classList.add('visible'); }
+
+  autoStartTimer = setInterval(() => {
+    remaining--;
+    if (el) el.textContent = `auto en ${remaining}s`;
+    if (remaining <= 0) {
+      clearInterval(autoStartTimer);
+      autoStartTimer = null;
+      if (el) { el.textContent = ''; el.classList.remove('visible'); }
+      setMode(nextMode);
+      startPomo();
+    }
+  }, 1000);
+}
+
+function cancelAutoStart() {
+  if (autoStartTimer) { clearInterval(autoStartTimer); autoStartTimer = null; }
+  const el = document.getElementById('autoStartCountdown');
+  if (el) { el.textContent = ''; el.classList.remove('visible'); }
+}
+
+// ══════════════════════════════════════════════
+//  FOCUS MODE
+// ══════════════════════════════════════════════
+function enterFocusMode() {
+  document.body.classList.add('focus-mode');
+}
+
+function exitFocusMode() {
+  document.body.classList.remove('focus-mode');
+}
+
+// ══════════════════════════════════════════════
+//  INCOMPLETE SESSION TRACKING
+// ══════════════════════════════════════════════
+function recordIncompleteSession() {
+  if (pomo.mode !== 'study') return;
+  const elapsed = pomo.duration - pomo.remaining;
+  if (elapsed < 60) return; // ignore < 1 min
+  pomoSessionStore.append({
+    duration: elapsed,
+    type: 'study',
+    subject: elSubject ? elSubject.value : '',
+    timestamp: new Date().toISOString(),
+    incomplete: true,
+  });
+}
+
+function updateIncompleteNote() {
+  const el = document.getElementById('pomoIncompleteNote');
+  if (!el) return;
+  const started = pomo.remaining < pomo.duration;
+  const notDone = pomo.remaining > 0;
+  el.classList.toggle('visible', started && notDone && pomo.mode === 'study');
+}
+
+// ══════════════════════════════════════════════
+//  PERFORMANCE INSIGHTS (light AI logic)
+// ══════════════════════════════════════════════
+function computePerformanceInsight() {
+  const sessions = pomoSessionStore.getAll().filter(s => s.type === 'study' && !s.incomplete && s.timestamp);
+
+  if (sessions.length < 3) return null;
+
+  // Best time of day
+  const buckets = { morning: 0, afternoon: 0, night: 0 };
+  sessions.forEach(s => {
+    const h = new Date(s.timestamp).getHours();
+    if (h >= 6 && h < 12) buckets.morning++;
+    else if (h >= 12 && h < 19) buckets.afternoon++;
+    else buckets.night++;
+  });
+  const bestTime = Object.entries(buckets).sort((a,b)=>b[1]-a[1])[0][0];
+  const timeLabel = { morning: 'a la mañana', afternoon: 'a la tarde', night: 'de noche' }[bestTime];
+
+  // Top subject (all time)
+  const counts = {};
+  sessions.forEach(s => { if(s.subject) counts[s.subject] = (counts[s.subject]||0)+1; });
+  const topSubject = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+
+  const parts = [];
+  if (topSubject) parts.push(`${topSubject} es tu materia principal`);
+  if (bestTime) parts.push(`Rendís mejor ${timeLabel}`);
+
+  return parts.length ? parts.join(' · ') : null;
+}
+
+function renderPerfInsight() {
+  const el = document.getElementById('perfInsightBar');
+  if (!el) return;
+  const msg = computePerformanceInsight();
+  if (!msg) { el.innerHTML = ''; return; }
+  el.innerHTML = `<span class="perf-insight-icon">✦</span><span>${msg}</span>`;
+}
+
+// ══════════════════════════════════════════════
+//  HEATMAP (last 30 days)
+// ══════════════════════════════════════════════
+function renderHeatmap() {
+  const el = document.getElementById('heatmapGrid');
+  if (!el) return;
+
+  const sessions = pomoSessionStore.getAll().filter(s => s.type === 'study' && !s.incomplete && s.timestamp);
+  const byDay = {};
+  sessions.forEach(s => {
+    const d = s.timestamp.slice(0, 10);
+    byDay[d] = (byDay[d] || 0) + 1;
+  });
+
+  const cells = [];
+  const now = new Date(); now.setHours(0,0,0,0);
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i);
+    const dk = d.toISOString().slice(0, 10);
+    const count = byDay[dk] || 0;
+    const level = count === 0 ? 0 : count === 1 ? 1 : count <= 2 ? 2 : count <= 3 ? 3 : count <= 5 ? 4 : 5;
+    const label = `${dk}: ${count} sesiones`;
+    cells.push(`<div class="heatmap-cell" data-v="${level}" title="${label}"></div>`);
+  }
+  el.innerHTML = cells.join('');
+}
+
 // ══════════════════════════════════════════════
 //  POMODORO ENGINE
 // ══════════════════════════════════════════════
@@ -1753,7 +2209,9 @@ function generateInsight(sessions, stats, streakState) {
 }
 
 function refreshPomoStats() {
-  const stats = computePomodoroStats(pomoSessionStore.getAll());
+  const allSessions = pomoSessionStore.getAll();
+  const completeSessions = allSessions.filter(s => !s.incomplete);
+  const stats = computePomodoroStats(completeSessions);
   const elStudyToday = document.getElementById("pomoStatStudyToday");
   const elSessionsToday = document.getElementById("pomoStatSessionsToday");
   const elStudyWeek = document.getElementById("pomoStatStudyWeek");
@@ -1763,7 +2221,7 @@ function refreshPomoStats() {
   updateStatNumberAnimated(elSessionsToday, stats.sessionsToday);
   updateStatNumberAnimated(elStudyWeek, stats.studyMinutesThisWeek);
 
-  const streakState = computeStudyStreakState(pomoSessionStore.getAll());
+  const streakState = computeStudyStreakState(completeSessions);
   const elStreak = document.getElementById("pomoStatsStreakNum");
   const elStreakPending = document.getElementById("pomoStatsStreakPending");
   const elStreakWrap = document.getElementById("pomoStatsStreakWrap");
@@ -1830,7 +2288,7 @@ function refreshPomoStats() {
   const elInsight = document.getElementById("pomoInsight");
   if (elInsight) {
     elInsight.textContent = generateInsight(
-      pomoSessionStore.getAll(),
+      completeSessions,
       stats,
       streakState
     );
@@ -1933,7 +2391,12 @@ function updateDashFocusPill(){
 
 function startPomo(){
   if(pomo.running){ pausePomo(); return; }
+  cancelAutoStart();
   pomo.running = true;
+  if(pomo.mode === 'study') {
+    enterFocusMode();
+    saveLastSession(elSubject ? elSubject.value : '', pomo.mode);
+  }
   pomo.interval = setInterval(()=>{
     pomo.remaining--;
     if(pomo.remaining <= 0){
@@ -1942,11 +2405,21 @@ function startPomo(){
       pomo.running = false;
       recordCompletedPomoSession();
       if(pomo.mode==='study'){ pomo.sessions = Math.min(pomo.sessions+1, pomo.maxSessions); }
+      exitFocusMode();
       renderPomo();
+      renderQuickStart();
+      renderHeatmap();
+      renderPerfInsight();
       playDone();
-      setTimeout(()=>{
-        alert(pomo.mode==='study' ? '🎉 ¡Sesión completada! Tomá un descanso.' : '✅ ¡Descanso terminado! A estudiar.');
-      },100);
+      // auto-start next phase (no alert if auto-start is on)
+      const nextMode = pomo.mode === 'study' ? 'short' : 'study';
+      if (autoStartEnabled) {
+        scheduleAutoStart(nextMode);
+      } else {
+        setTimeout(()=>{
+          alert(pomo.mode==='study' ? '🎉 ¡Sesión completada! Tomá un descanso.' : '✅ ¡Descanso terminado! A estudiar.');
+        },100);
+      }
       return;
     }
     renderPomo();
@@ -1957,12 +2430,20 @@ function startPomo(){
 function pausePomo(){
   pomo.running = false;
   clearInterval(pomo.interval);
+  cancelAutoStart();
+  exitFocusMode();
+  recordIncompleteSession();
+  updateIncompleteNote();
   renderPomo();
 }
 
 function resetPomo(){
   pausePomo();
   pomo.remaining = pomo.duration;
+  cancelAutoStart();
+  exitFocusMode();
+  const el = document.getElementById('pomoIncompleteNote');
+  if(el) el.classList.remove('visible');
   renderPomo();
 }
 
@@ -2008,6 +2489,42 @@ setGradient('study');
 renderDurButtons('study');
 renderPomo();
 refreshPomoStats();
+
+// ── Init new features ──
+loadAutoStartPref();
+
+// Restore last session subject
+(function() {
+  const last = getLastSession();
+  if (last && last.subject && elSubject) elSubject.value = last.subject;
+})();
+
+renderQuickStart();
+renderHeatmap();
+renderPerfInsight();
+
+// Auto-start toggle handler
+document.getElementById('autoStartToggle')?.addEventListener('change', function() {
+  autoStartEnabled = this.checked;
+  try { localStorage.setItem(AUTO_START_KEY, JSON.stringify(autoStartEnabled)); } catch(e) {}
+  if (!autoStartEnabled) cancelAutoStart();
+});
+
+// Focus exit button
+document.getElementById('focusExitBtn')?.addEventListener('click', () => {
+  cancelAutoStart();
+  exitFocusMode();
+  if(pomo.running) pausePomo();
+});
+
+// Update incomplete note on each tick (patch renderPomo to call it)
+const _origRenderPomo = renderPomo;
+// already patched via updateIncompleteNote calls in pause/reset
+// call it on subject change too
+if(elSubject) elSubject.addEventListener('input', () => {
+  if (elSubject.value) saveLastSession(elSubject.value, pomo.mode);
+  renderQuickStart();
+});
 
 window.addEventListener("storage", (e) => {
   if (e.key === POMODORO_SESSIONS_STORAGE_KEY) refreshPomoStats();
